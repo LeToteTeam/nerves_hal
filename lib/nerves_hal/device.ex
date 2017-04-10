@@ -14,51 +14,60 @@ defmodule Nerves.HAL.Device do
   end
 
   def load_attributes(devpath) do
+    devpath = Path.join(devpath, "device")
     case File.ls(devpath) do
       {:ok, files} ->
         files
-        |> Enum.map(fn (attribute) ->
-            file = Path.join(devpath, attribute)
-            lstat = File.lstat!(file)
-            %{attribute: attribute, lstat: lstat}
+        |> Enum.map(&Path.join(devpath, &1))
+        |> Enum.filter(&is_regular_file?/1)
+        |> Enum.reduce(%{}, fn (attribute, acc) ->
+            lstat = File.lstat!(attribute)
+            content =
+              case File.read(attribute) do
+                {:ok, data} -> data
+                _ -> ""
+              end
+            Map.put(acc, attribute, %{lstat: lstat, content: content})
         end)
-        |> Enum.filter(& &1.lstat.type == :regular)
-      _ -> []
+      _ -> %{}
     end
   end
 
   def device_file(device) do
-    dev = Enum.find(device.attributes, & &1.attribute == "dev")
-    case dev do
-      [] -> {:error, :no_device_file}
-      _ ->
-        [dev_major, dev_minor] =
-          Path.join(device.devpath, "dev")
-          |> File.read!()
-          |> String.split(":")
-          |> Enum.map(&String.strip/1)
-          |> Enum.map(fn (int) ->
-            {int, _} = Integer.parse(int)
-            int
-          end)
+    uevent_info =
+      Path.join(device.devpath, "uevent")
+      |> File.read!()
+      |> String.strip
+      |> String.split("\n")
+      |> parse_uevent(%{})
 
-        case File.ls("/dev") do
-          {:ok, files} ->
-            files
-            |> Enum.map(& Path.join("/dev", &1))
-            |> Enum.reject(& File.lstat!(&1).type != :device)
-            |> Enum.filter(fn (dev_path) ->
-              %{minor_device: rdev} = File.lstat!(dev_path)
-              <<major, minor>> = <<rdev :: size(16)>>
-              dev_major == major and
-              dev_minor == minor
-            end)
-            |> List.first
-          error -> error
-        end
-
-    end
+    Path.join("/dev", Map.get(uevent_info, :devname, ""))
   end
 
+  def parse_uevent([], acc), do: acc
+
+  def parse_uevent([<<"MAJOR=", major :: binary>> | tail], acc) do
+    major = Integer.parse(major)
+    acc = Map.put(acc, :major, major)
+    parse_uevent(tail, acc)
+  end
+
+  def parse_uevent([<<"MINOR=", minor :: binary>> | tail], acc) do
+    minor = Integer.parse(minor)
+    acc = Map.put(acc, :minor, minor)
+    parse_uevent(tail, acc)
+  end
+
+  def parse_uevent([<<"DEVNAME=", devname :: binary>> | tail], acc) do
+    acc = Map.put(acc, :devname, devname)
+    parse_uevent(tail, acc)
+  end
+
+  def parse_uevent([_ | tail], acc), do: parse_uevent(tail, acc)
+  
+  def is_regular_file?(file) do
+    stat = File.lstat!(file)
+    stat.type == :regular 
+  end
 
 end
