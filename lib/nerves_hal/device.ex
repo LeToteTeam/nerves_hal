@@ -20,13 +20,14 @@ defmodule Nerves.HAL.Device do
         files
         |> Enum.map(&Path.join(devpath, &1))
         |> Enum.filter(&is_regular_file?/1)
-        |> Enum.reduce(%{}, fn (attribute, acc) ->
-            lstat = File.lstat!(attribute)
+        |> Enum.reduce(%{}, fn (file, acc) ->
+            lstat = File.lstat!(file)
             content =
-              case File.read(attribute) do
+              case File.read(file) do
                 {:ok, data} -> data
                 _ -> ""
               end
+            attribute = Path.basename(file)
             Map.put(acc, attribute, %{lstat: lstat, content: content})
         end)
       _ -> %{}
