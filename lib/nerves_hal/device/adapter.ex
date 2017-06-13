@@ -49,16 +49,6 @@ defmodule Nerves.HAL.Device.Adapter do
     }}
   end
 
-  def handle_call({:connect, device}, _from, s) do
-    case s.mod.handle_connect(device, s.adapter_state) do
-      {:ok, adapter_state} ->
-        s = put_in(s, [:adapter_state], adapter_state)
-        {:reply, :ok, s}
-      {:error, error, s} ->
-        {:reply, {:error, error}, s}
-    end
-  end
-
   def handle_info(data, s) do
     s =
       case s.mod.handle_info(data, s.adapter_state) do
@@ -67,6 +57,16 @@ defmodule Nerves.HAL.Device.Adapter do
           put_in(s, [:adapter_state], adapter_state)
       end
     {:noreply, s}
+  end
+
+  def handle_call({:connect, device}, _from, s) do
+    case s.mod.handle_connect(device, s.adapter_state) do
+      {:ok, adapter_state} ->
+        s = put_in(s, [:adapter_state], adapter_state)
+        {:reply, :ok, s}
+      {:error, error, s} ->
+        {:reply, {:error, error}, s}
+    end
   end
 
   def handle_call(request, from, s) do
