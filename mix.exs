@@ -3,7 +3,7 @@ defmodule Nerves.HAL.Mixfile do
 
   def project do
     [app: :nerves_hal,
-     version: "0.2.0",
+     version: "0.3.0",
      elixir: "~> 1.4",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
@@ -29,6 +29,6 @@ defmodule Nerves.HAL.Mixfile do
   #
   # Type "mix help deps" for more examples and options
   defp deps do
-    [{:nerves_runtime, "~> 0.1.1"}]
+    [{:nerves_runtime, "~> 0.2"}]
   end
 end
