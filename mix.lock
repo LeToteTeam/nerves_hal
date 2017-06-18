@@ -1,3 +1,4 @@
 %{"elixir_make": {:hex, :elixir_make, "0.4.0", "992f38fabe705bb45821a728f20914c554b276838433349d4f2341f7a687cddf", [:mix], []},
   "gen_stage": {:hex, :gen_stage, "0.12.0", "74ec6f84ea0e0e81aa26b745870495094de1c59bfdbd012ae3103208ea124623", [:mix], []},
-  "nerves_runtime": {:hex, :nerves_runtime, "0.2.0", "2fbde788f942abd7a55274edb7ea5608782ef4a73836f3fed66e02d33c386de7", [:make, :mix], [{:elixir_make, "~> 0.4", [hex: :elixir_make, optional: false]}, {:gen_stage, "~> 0.4", [hex: :gen_stage, optional: false]}]}}
+  "nerves_runtime": {:hex, :nerves_runtime, "0.3.0", "1860b7d6213c1fd715956b49f739cca21fc1a5f42d8b2e4ac601e06806b5c943", [:make, :mix], [{:elixir_make, "~> 0.4", [hex: :elixir_make, optional: false]}, {:system_registry, "~> 0.3.0", [hex: :system_registry, optional: false]}]},
+  "system_registry": {:hex, :system_registry, "0.3.0", "31a748d0445984622359b901f2b4cdcd25457eeee9be881310590e3cd553f017", [:mix], []}}

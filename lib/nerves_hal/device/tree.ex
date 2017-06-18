@@ -1,14 +1,12 @@
 defmodule Nerves.HAL.Device.Tree do
   use GenStage
-
+  alias Nerves.HAL.Device
   require Logger
 
-  @sysfs "/sys"
+  @subsystems [:state, "subsystems"]
 
   def start_link() do
-    {:ok, pid} = GenStage.start_link(__MODULE__, [], name: __MODULE__)
-    GenStage.sync_subscribe(pid, to: Nerves.Runtime.Kernel.UEvent)
-    {:ok, pid}
+    GenStage.start_link(__MODULE__, [], name: __MODULE__)
   end
 
   def register_handler(mod, pid \\ nil) do
@@ -19,41 +17,11 @@ defmodule Nerves.HAL.Device.Tree do
   # GenStage API
 
   def init([]) do
-    {:producer_consumer, %{
+    SystemRegistry.register()
+    {:producer, %{
       handlers: [],
-      devices: discover_devices(),
+      subsystems: %{}
     }, dispatcher: GenStage.BroadcastDispatcher, buffer_size: 0}
-  end
-
-  def handle_events([{:uevent, _, %{action: "add"} = data}], _from, s) do
-    device =
-      Path.join(@sysfs, data.devpath)
-      |> load_device(data.subsystem)
-    devices = s.devices
-    subsystem = String.to_atom(data.subsystem)
-    subsystem_devices = Keyword.get(devices, subsystem, [])
-    devices = Keyword.put(s.devices, subsystem, [device | subsystem_devices])
-
-    {:noreply, [{subsystem, :add, device}], %{s | devices: devices}}
-  end
-
-  def handle_events([{:uevent, _, %{action: "remove"} = data}], _from, s) do
-    subsystem = String.to_atom(data.subsystem)
-    subsystem_devices =
-      s.devices
-      |> Keyword.get(subsystem, [])
-      |> Enum.filter(& &1.subsystem == subsystem)
-    event_devpath = Path.join(@sysfs, data.devpath)
-    device = Enum.find(subsystem_devices, & &1.devpath == event_devpath)
-
-    subsystem_devices =
-      case device do
-        %Nerves.HAL.Device{devpath: devpath} ->
-          Enum.reject(subsystem_devices, & &1.devpath == devpath)
-        _ -> subsystem_devices
-      end
-    devices = Keyword.put(s.devices, subsystem, subsystem_devices)
-    {:noreply, [{subsystem, :remove, device}], %{s | devices: devices}}
   end
 
   def handle_events(_events, _from, s) do
@@ -69,43 +37,54 @@ defmodule Nerves.HAL.Device.Tree do
   def handle_call({:register_handler, mod, pid}, _from, s) do
     {adapter, _opts} = mod.__adapter__()
     subsystem = adapter.__subsystem__
-    devices = Keyword.get(s.devices, subsystem, [])
+    #IO.puts "Register handler #{inspect subsystem}"
+    devices =
+      Map.get(s.subsystems, subsystem, [])
+      |> Enum.map(& Device.load(&1, subsystem))
     s = %{s | handlers: [{mod, pid} | s.handlers]}
     {:reply, {:ok, devices}, [], s}
   end
 
+  def handle_info({:system_registry, :global, registry}, s) do
+    subsystems = get_in(registry, @subsystems) || %{}
+    modified =
+      Enum.reduce(subsystems, [], fn
+        ({subsystem, new}, acc) ->
+          old = Map.get(s.subsystems, subsystem, [])
+          {added, removed} = changes(new, old)
+          added = Enum.map(added, &action(&1, subsystem, :add))
+          removed = Enum.map(removed, &action(&1, subsystem, :remove))
+          acc ++ added ++ removed
+      end)
+    old_subsystems = Map.keys(s.subsystems)
+    new_subsystems = Map.keys(subsystems)
+
+    removed =
+      Enum.reject(old_subsystems, &Enum.member?(new_subsystems, &1))
+      |> Enum.reduce([], fn
+        (subsystem, acc) ->
+          removed_devices =
+            Map.get(s.subsystems, subsystem, [])
+            |> Enum.map(&action(&1, subsystem, :remove))
+          removed_devices ++ acc
+      end)
+
+    {:noreply, modified ++ removed, %{s | subsystems: subsystems}}
+  end
+
   # Private Functions
 
-  defp discover_devices do
-    class_dir = "/sys/class"
-    File.ls!(class_dir)
-    # walk the classes and find all options, then group
-    |> Enum.reduce([], fn(subsystem, acc) ->
-      subsystem_path = Path.join(class_dir, subsystem)
-      # first create device pids
-      devices = subsystem_devices(subsystem, subsystem_path)
-      Keyword.put(acc, String.to_atom(subsystem), devices)
-    end)
+  defp action(scope, subsystem, action) do
+    device = Device.load(scope, subsystem)
+    #IO.puts "#{inspect action} #{subsystem} #{inspect device.devpath}"
+    {subsystem, action, device}
   end
 
-  defp subsystem_devices(subsystem, path) do
-    path
-    |> File.ls!()
-    |> Enum.map(& Path.join(path, &1))
-    |> Enum.reject(& File.lstat!(&1).type != :symlink)
-    |> Enum.map(& expand_symlink(&1, path))
-    |> Enum.map(& load_device(&1, subsystem))
-  end
-
-  defp load_device(devpath, subsystem) do
-    Nerves.HAL.Device.load(devpath, subsystem)
-  end
-
-  defp expand_symlink(path, dir) do
-    {:ok, link} = :file.read_link(String.to_char_list(path))
-    link
-    |> to_string
-    |> Path.expand(dir)
+  defp changes(new, new), do: {[], []}
+  defp changes(new, old) do
+    added = Enum.reject(new, &Enum.member?(old, &1))
+    removed = Enum.reject(old, &Enum.member?(new, &1))
+    {added, removed}
   end
 
 end

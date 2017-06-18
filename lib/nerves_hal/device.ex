@@ -1,16 +1,18 @@
 defmodule Nerves.HAL.Device do
 
-  defstruct [subsystem: nil, devpath: nil,  attributes: []]
+  defstruct [scope: [], subsystem: nil, devpath: nil,  attributes: []]
 
-  def load(devpath, subsystem) when is_binary(subsystem) do
-    load(devpath, String.to_atom(subsystem))
-  end
+  @sysfs "/sys"
 
-  def load(devpath, subsystem) do
+  def load([_ | devscope] = scope, subsystem) do
+    devpath =
+        Path.join([@sysfs, "/", Enum.join(devscope, "/")])
+
     %__MODULE__{
+      scope: scope,
       devpath: devpath,
       subsystem: subsystem,
-      attributes: load_attributes(devpath)}
+      attributes: []}
   end
 
   def load_attributes(devpath) do
@@ -21,28 +23,33 @@ defmodule Nerves.HAL.Device do
         |> Enum.map(&Path.join(devpath, &1))
         |> Enum.filter(&is_regular_file?/1)
         |> Enum.reduce(%{}, fn (file, acc) ->
-            lstat = File.lstat!(file)
             content =
               case File.read(file) do
                 {:ok, data} -> data
                 _ -> ""
               end
             attribute = Path.basename(file)
-            Map.put(acc, attribute, %{lstat: lstat, content: content})
+            Map.put(acc, attribute, %{content: content})
         end)
       _ -> %{}
     end
   end
 
   def device_file(device) do
-    uevent_info =
-      Path.join(device.devpath, "uevent")
-      |> File.read!()
-      |> String.strip
-      |> String.split("\n")
-      |> parse_uevent(%{})
+      case File.read(uevent_file(device)) do
+        {:ok, uevent} ->
+          uevent_info =
+            uevent
+            |> String.strip
+            |> String.split("\n")
+            |> parse_uevent(%{})
+          Path.join("/dev", Map.get(uevent_info, :devname, ""))
+        _ -> nil
+      end
+  end
 
-    Path.join("/dev", Map.get(uevent_info, :devname, ""))
+  def uevent_file(device) do
+    Path.join(device.devpath, "uevent")
   end
 
   def parse_uevent([], acc), do: acc
@@ -65,10 +72,12 @@ defmodule Nerves.HAL.Device do
   end
 
   def parse_uevent([_ | tail], acc), do: parse_uevent(tail, acc)
-  
+
   def is_regular_file?(file) do
-    stat = File.lstat!(file)
-    stat.type == :regular 
+    case File.lstat(file) do
+      {:ok, stat} -> stat.type == :regular
+      _ -> false
+    end
   end
 
 end

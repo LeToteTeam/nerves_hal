@@ -1,7 +1,7 @@
 if Code.ensure_loaded?(Nerves.UART) do
   defmodule Nerves.HAL.Device.Adapters.Tty do
     use Nerves.HAL.Device.Adapter,
-      subsystem: :tty
+      subsystem: "tty"
 
     require Logger
 

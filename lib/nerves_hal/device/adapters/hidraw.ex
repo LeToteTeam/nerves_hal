@@ -1,7 +1,7 @@
 if Code.ensure_loaded?(Hidraw) do
   defmodule Nerves.HAL.Device.Adapters.Hidraw do
     use Nerves.HAL.Device.Adapter,
-      subsystem: :hidraw
+      subsystem: "hidraw"
 
     require Logger
 

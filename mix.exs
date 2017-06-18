@@ -29,6 +29,7 @@ defmodule Nerves.HAL.Mixfile do
   #
   # Type "mix help deps" for more examples and options
   defp deps do
-    [{:nerves_runtime, "~> 0.2"}]
+    [{:nerves_runtime, "~> 0.3"},
+     {:gen_stage, "~> 0.12"}]
   end
 end
