@@ -6,15 +6,22 @@ defmodule Nerves.HAL.Device do
     load(devpath, String.to_atom(subsystem))
   end
 
-  def load(devpath, subsystem) do
+  def load(devpath) do
     %__MODULE__{
       devpath: devpath,
-      subsystem: subsystem,
+      subsystem: subsystem(devpath),
       attributes: load_attributes(devpath)}
   end
 
+  def subsystem(devpath) do
+    subsystem = Path.join(devpath, "subsystem")
+    if File.dir?(subsystem) do
+      expand_symlink(subsystem, devpath)
+      |> Path.basename
+    end
+  end
+
   def load_attributes(devpath) do
-    devpath = Path.join(devpath, "device")
     case File.ls(devpath) do
       {:ok, files} ->
         files
@@ -28,6 +35,7 @@ defmodule Nerves.HAL.Device do
                 _ -> ""
               end
             attribute = Path.basename(file)
+            attribute_action(attribute, content)
             Map.put(acc, attribute, %{lstat: lstat, content: content})
         end)
       _ -> %{}
@@ -65,10 +73,26 @@ defmodule Nerves.HAL.Device do
   end
 
   def parse_uevent([_ | tail], acc), do: parse_uevent(tail, acc)
-  
+
   def is_regular_file?(file) do
     stat = File.lstat!(file)
-    stat.type == :regular 
+    stat.type == :regular
+  end
+
+  # Automatically modprobe the modalias to load the module for the device driver
+  def attribute_action("modalias", content) do
+    alias = String.strip(content)
+    System.cmd("modprobe", [alias], stderr_to_stdout: true)
+    |> IO.inspect
+  end
+
+  def attribute_action(_, _), do: :noop
+
+  defp expand_symlink(path, dir) do
+    {:ok, link} = :file.read_link(String.to_char_list(path))
+    link
+    |> to_string
+    |> Path.expand(dir)
   end
 
 end

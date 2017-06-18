@@ -16,6 +16,10 @@ defmodule Nerves.HAL.Device.Tree do
     GenStage.call(__MODULE__, {:register_handler, mod, pid})
   end
 
+  def devices() do
+    GenStage.call(__MODULE__, :devices)
+  end
+
   # GenStage API
 
   def init([]) do
@@ -28,7 +32,7 @@ defmodule Nerves.HAL.Device.Tree do
   def handle_events([{:uevent, _, %{action: "add"} = data}], _from, s) do
     device =
       Path.join(@sysfs, data.devpath)
-      |> load_device(data.subsystem)
+      |> Nerves.HAL.Device.load
     devices = s.devices
     subsystem = String.to_atom(data.subsystem)
     subsystem_devices = Keyword.get(devices, subsystem, [])
@@ -74,31 +78,33 @@ defmodule Nerves.HAL.Device.Tree do
     {:reply, {:ok, devices}, [], s}
   end
 
+  def handle_call(:devices, _from, s) do
+    {:reply, {:ok, s.devices}, [], s}
+  end
+
   # Private Functions
 
   defp discover_devices do
-    class_dir = "/sys/class"
-    File.ls!(class_dir)
-    # walk the classes and find all options, then group
-    |> Enum.reduce([], fn(subsystem, acc) ->
-      subsystem_path = Path.join(class_dir, subsystem)
-      # first create device pids
-      devices = subsystem_devices(subsystem, subsystem_path)
-      Keyword.put(acc, String.to_atom(subsystem), devices)
+    bus_dir = "/sys/bus"
+    File.ls!(bus_dir)
+    |> Enum.reduce([], fn(bus, acc) ->
+      path = Path.join(bus_dir, bus)
+      devices_dir = Path.join(path, "devices")
+      case File.ls(devices_dir) do
+        {:ok, devices} ->
+          acc ++ load_devices(devices_dir)
+        _ -> acc
+      end
     end)
   end
 
-  defp subsystem_devices(subsystem, path) do
+  defp load_devices(path) do
     path
     |> File.ls!()
     |> Enum.map(& Path.join(path, &1))
     |> Enum.reject(& File.lstat!(&1).type != :symlink)
     |> Enum.map(& expand_symlink(&1, path))
-    |> Enum.map(& load_device(&1, subsystem))
-  end
-
-  defp load_device(devpath, subsystem) do
-    Nerves.HAL.Device.load(devpath, subsystem)
+    |> Enum.map(& Nerves.HAL.Device.load/1)
   end
 
   defp expand_symlink(path, dir) do
