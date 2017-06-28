@@ -21,7 +21,7 @@ defmodule Nerves.HAL.Device.Tree do
     {:producer, %{
       handlers: [],
       subsystems: %{}
-    }, dispatcher: GenStage.BroadcastDispatcher, buffer_size: 0}
+    }, dispatcher: GenStage.BroadcastDispatcher}
   end
 
   def handle_events(_events, _from, s) do
@@ -68,9 +68,11 @@ defmodule Nerves.HAL.Device.Tree do
             |> Enum.map(&action(&1, subsystem, :remove))
           removed_devices ++ acc
       end)
-
-    {:noreply, modified ++ removed, %{s | subsystems: subsystems}}
+    events = modified ++ removed
+    {:noreply, events, %{s | subsystems: subsystems}}
   end
+
+  def handle_info(_, s), do: {:noreply, [], s}
 
   # Private Functions
 
