@@ -1,5 +1,10 @@
 # Release Notes
 
+## v0.7.0
+
+* Enhancements
+  * Added `NervesHAL.Device.Spec.child_spec/1` to modules that call `__using__`
+
 ## v0.6.0
 
 * Enhancements
