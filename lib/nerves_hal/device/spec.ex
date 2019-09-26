@@ -40,8 +40,18 @@ defmodule Nerves.HAL.Device.Spec do
 
       def __adapter__, do: {@adapter, @adapter_opts}
 
-      def start_link() do
-        Nerves.HAL.Device.Spec.start_link(__MODULE__, [])
+      def child_spec(opts) do
+        %{
+          id: __MODULE__,
+          start: {__MODULE__, :start_link, [opts]},
+          type: :worker,
+          restart: :permanent,
+          shutdown: 500
+        }
+      end
+
+      def start_link(handler_state) do
+        Nerves.HAL.Device.Spec.start_link(__MODULE__, handler_state)
       end
 
       @doc false
@@ -59,7 +69,7 @@ defmodule Nerves.HAL.Device.Spec do
         :ok
       end
 
-      defoverridable start_link: 0, handle_call: 3, handle_cast: 2, terminate: 2
+      defoverridable start_link: 1, handle_call: 3, handle_cast: 2, terminate: 2
     end
   end
 
